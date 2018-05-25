@@ -34,7 +34,11 @@ class FilesTests: XCTestCase {
     override func setUp() {
         super.setUp()
         folder = try! Folder.home.createSubfolderIfNeeded(withName: ".filesTest")
-        try! folder.empty()
+        do {
+            try folder.empty()
+        } catch {
+            print(error)
+        }
     }
 
     override func tearDown() {
@@ -147,10 +151,10 @@ class FilesTests: XCTestCase {
             try folder.createFile(named: "file")
             
             // Make sure we're not already in the file's parent directory
-            XCTAssertNotEqual(FileManager.default.currentDirectoryPath, folder.path)
+            XCTAssertNotEqual(FileManager.default.currentDirectory, folder.path)
             
-            XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(folder.path))
-            let file = try File(path: "file")
+            XCTAssertTrue(FileManager.default.changeCurrentDirectory(folder.path))
+            let file = try File(name: "file")
             try XCTAssertEqual(file.read(), Data())
         }
     }
@@ -173,8 +177,8 @@ class FilesTests: XCTestCase {
             let file = try folder.createFile(named: "file")
 
             // Move to the subfolder
-            XCTAssertNotEqual(FileManager.default.currentDirectoryPath, subfolder.path)
-            XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(subfolder.path))
+            XCTAssertNotEqual(FileManager.default.currentDirectory, subfolder.path)
+            XCTAssertTrue(FileManager.default.changeCurrentDirectory(subfolder.path))
 
             try XCTAssertEqual(File(path: "../file"), file)
         }
@@ -501,14 +505,14 @@ class FilesTests: XCTestCase {
     func testFileDescription() {
         performTest {
             let file = try folder.createFile(named: "file")
-            XCTAssertEqual(file.description, "File(name: file, path: \(folder.path)file)")
+            XCTAssertEqual(file.description, "File(name: file, path: \(folder.path.path)/file)")
         }
     }
     
     func testFolderDescription() {
         performTest {
             let subfolder = try folder.createSubfolder(named: "folder")
-            XCTAssertEqual(subfolder.description, "Folder(name: folder, path: \(folder.path)folder/)")
+            XCTAssertEqual(subfolder.description, "Folder(name: folder, path: \(folder.path.path)/folder)")
         }
     }
 
@@ -576,7 +580,7 @@ class FilesTests: XCTestCase {
     func testAccessingCurrentWorkingDirectory() {
         performTest {
             let folder = try Folder(path: "")
-            XCTAssertEqual(FileManager.default.currentDirectoryPath + "/", folder.path)
+            XCTAssertEqual(FileManager.default.currentDirectory, folder.path.absoluteURL)
             XCTAssertEqual(FileSystem().currentFolder, folder)
             XCTAssertEqual(Folder.current, folder)
         }
@@ -794,3 +798,20 @@ extension FilesTests {
     }
 }
 #endif
+
+extension URL: ExpressibleByStringLiteral {
+    public init(stringLiteral value: StaticString) {
+        self = URL(fileURLWithPath: NSString(stringLiteral: value).expandingTildeInPath)
+    }
+}
+
+private extension URL {
+    static func + (lhs: URL, rhs: String) -> URL {
+        let isDirectory = rhs.hasSuffix("/")
+        return lhs.appendingPathComponent(rhs, isDirectory: isDirectory)
+    }
+
+//    static func + (lhs: URL, rhs: URL) -> URL {
+//        return lhs + rhs.path
+//    }
+}

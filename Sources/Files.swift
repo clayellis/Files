@@ -50,7 +50,7 @@ public class FileSystem {
             /// Thrown when an empty path was given when initializing a file
             case empty
             /// Thrown when an item of the expected type wasn't found for a given path (contains the path)
-            case invalid(String)
+            case invalid(URL)
         
             /// Operator used to compare two instances for equality
             public static func ==(lhs: PathError, rhs: PathError) -> Bool {
@@ -164,12 +164,12 @@ public class FileSystem {
             guard lhs.kind == rhs.kind else {
                 return false
             }
-            
-            return lhs.path == rhs.path
+
+            return lhs.path.absoluteURL == rhs.path.absoluteURL
         }
         
         /// The path of the item, relative to the root of the file system
-        public private(set) var path: String
+        public private(set) var path: URL
         
         /// The name of the item (including any extension)
         public private(set) var name: String
@@ -186,13 +186,12 @@ public class FileSystem {
         
         /// Any extension that the item has
         public var `extension`: String? {
-            let components = name.components(separatedBy: ".")
-            
-            guard components.count > 1 else {
+            let ext = path.pathExtension
+            if ext.isEmpty {
                 return nil
+            } else {
+                return ext
             }
-            
-            return components.last
         }
 
         /// The date when the item was last modified
@@ -207,35 +206,39 @@ public class FileSystem {
         
         /// A string describing the item
         public var description: String {
-            return "\(kind)(name: \(name), path: \(path))"
+            return "\(kind)(name: \(name), path: \(path.path))"
         }
         
         fileprivate let kind: Kind
         fileprivate let fileManager: FileManager
-        
-        fileprivate init(path: String, kind: Kind, using fileManager: FileManager) throws {
-            guard !path.isEmpty else {
+
+        fileprivate init(path: URL, kind: Kind, using fileManager: FileManager) throws {
+            if kind == .file {
+                if #available(OSX 10.11, *) {
+                    if path.hasDirectoryPath {
+                        throw PathError.empty
+                    }
+                } else {
+                    if path.path.hasSuffix("/") {
+                        throw PathError.empty
+                    }
+                }
+            }
+
+            guard !path.path.isEmpty else {
                 throw PathError.empty
             }
-            
+
             let path = try fileManager.absolutePath(for: path)
-            
-            guard fileManager.itemKind(atPath: path) == kind else {
+
+            guard fileManager.itemKind(at: path) == kind else {
                 throw PathError.invalid(path)
             }
-            
-            self.path = path
+
+            self.path = path.standardized
             self.fileManager = fileManager
             self.kind = kind
-            
-            let pathComponents = path.pathComponents
-            
-            switch kind {
-            case .file:
-                self.name = pathComponents.last!
-            case .folder:
-                self.name = pathComponents[pathComponents.count - 2]
-            }
+            self.name = path.lastPathComponent
         }
         
         /**
@@ -262,15 +265,11 @@ public class FileSystem {
                     }
                 }
             }
-            
-            var newPath = parent.path + newName
-            
-            if kind == .folder && !newPath.hasSuffix("/") {
-                newPath += "/"
-            }
-            
+
+            let newPath = parent.path.appendingPathComponent(newName, isDirectory: kind == .folder)
+
             do {
-                try fileManager.moveItem(atPath: path, toPath: newPath)
+                try fileManager.moveItem(at: path, to: newPath)
                 
                 name = newName
                 path = newPath
@@ -287,14 +286,16 @@ public class FileSystem {
          *  - throws: `FileSystem.Item.OperationError.moveFailed` if the item couldn't be moved
          */
         public func move(to newParent: Folder) throws {
-            var newPath = newParent.path + name
+            let newPath = newParent.path.appendingPathComponent(name, isDirectory: kind == .folder)
 
-            if kind == .folder && !newPath.hasSuffix("/") {
-                newPath += "/"
-            }
+//            var newPath = newParent.path + name
+//
+//            if kind == .folder && !newPath.hasSuffix("/") {
+//                newPath += "/"
+//            }
 
             do {
-                try fileManager.moveItem(atPath: path, toPath: newPath)
+                try fileManager.moveItem(at: path, to: newPath)
                 path = newPath
             } catch {
                 throw OperationError.moveFailed(self)
@@ -310,7 +311,7 @@ public class FileSystem {
          */
         public func delete() throws {
             do {
-                try fileManager.removeItem(atPath: path)
+                try fileManager.removeItem(at: path)
             } catch {
                 throw OperationError.deleteFailed(self)
             }
@@ -319,17 +320,29 @@ public class FileSystem {
     
     /// A reference to the temporary folder used by this file system
     public var temporaryFolder: Folder {
-        return try! Folder(path: NSTemporaryDirectory(), using: fileManager)
+        if #available(OSX 10.12, *) {
+            return try! Folder(path: fileManager.temporaryDirectory, using: fileManager)
+        } else {
+            let temporaryFolderPath = NSTemporaryDirectory()
+            let temporaryFolderURL = URL(fileURLWithPath: temporaryFolderPath, isDirectory: true)
+            return try! Folder(path: temporaryFolderURL, using: fileManager)
+        }
     }
     
     /// A reference to the current user's home folder
     public var homeFolder: Folder {
-        return try! Folder(path: ProcessInfo.processInfo.homeFolderPath, using: fileManager)
+        if #available(OSX 10.12, *) {
+            return try! Folder(path: fileManager.homeDirectoryForCurrentUser, using: fileManager)
+        } else {
+            let homeFolderPath = ProcessInfo.processInfo.homeFolderPath
+            let homeFolderURL = URL(fileURLWithPath: homeFolderPath, isDirectory: true)
+            return try! Folder(path: homeFolderURL, using: fileManager)
+        }
     }
 
     // A reference to the folder that is the current working directory
     public var currentFolder: Folder {
-        return try! Folder(path: "")
+        return try! Folder()
     }
     
     /**
@@ -351,7 +364,7 @@ public class FileSystem {
      *
      *  - returns: The file that was created
      */
-    @discardableResult public func createFile(at path: String, contents: Data = Data()) throws -> File {
+    @discardableResult public func createFile(at path: URL, contents: Data = Data()) throws -> File {
         let path = try fileManager.absolutePath(for: path)
 
         guard let parentPath = fileManager.parentPath(for: path) else {
@@ -359,8 +372,9 @@ public class FileSystem {
         }
 
         do {
-            let index = path.index(path.startIndex, offsetBy: parentPath.count + 1)
-            let name = String(path[index...])
+//            let index = path.index(path.startIndex, offsetBy: parentPath.count + 1)
+//            let name = String(path[index...])
+            let name = path.lastPathComponent
             return try createFolder(at: parentPath).createFile(named: name, contents: contents)
         } catch {
             throw File.Error.writeFailed
@@ -377,7 +391,7 @@ public class FileSystem {
      *
      *  - returns: The file that was either created or found.
      */
-    @discardableResult public func createFileIfNeeded(at path: String, contents: Data = Data()) throws -> File {
+    @discardableResult public func createFileIfNeeded(at path: URL, contents: Data = Data()) throws -> File {
         if let existingFile = try? File(path: path, using: fileManager) {
             return existingFile
         }
@@ -395,10 +409,10 @@ public class FileSystem {
      *
      *  - returns: The folder that was created
      */
-    @discardableResult public func createFolder(at path: String) throws -> Folder {
+    @discardableResult public func createFolder(at path: URL) throws -> Folder {
         do {
             let path = try fileManager.absolutePath(for: path)
-            try fileManager.createDirectory(atPath: path, withIntermediateDirectories: true, attributes: nil)
+            try fileManager.createDirectory(at: path, withIntermediateDirectories: true, attributes: nil)
             return try Folder(path: path, using: fileManager)
         } catch {
             throw Folder.Error.creatingFolderFailed
@@ -413,7 +427,7 @@ public class FileSystem {
      *
      *  - throws: `Folder.Error.creatingFolderFailed`
      */
-    @discardableResult public func createFolderIfNeeded(at path: String) throws -> Folder {
+    @discardableResult public func createFolderIfNeeded(at path: URL) throws -> Folder {
         if let existingFolder = try? Folder(path: path, using: fileManager) {
             return existingFolder
         }
@@ -455,10 +469,20 @@ public final class File: FileSystem.Item, FileSystemIterable {
      *  - throws: `FileSystemItem.Error` in case an empty path was given, or if the path given doesn't
      *    point to a readable file.
      */
-    public init(path: String, using fileManager: FileManager = .default) throws {
+    public init(path: URL, using fileManager: FileManager = .default) throws {
         try super.init(path: path, kind: .file, using: fileManager)
     }
-    
+
+    // TODO: Keep this public init around but deprecate it
+//    public init(path: String, using fileManager: FileManager = .default) throws {
+//        try super.init(path: path, kind: .file, using: fileManager)
+//    }
+
+    public init(name: String, using fileManager: FileManager = .default) throws {
+        let path = URL(fileURLWithPath: name)
+        try super.init(path: path, kind: .file, using: fileManager)
+    }
+
     /**
      *  Read the data contained within this file
      *
@@ -466,7 +490,7 @@ public final class File: FileSystem.Item, FileSystemIterable {
      */
     public func read() throws -> Data {
         do {
-            return try Data(contentsOf: URL(fileURLWithPath: path))
+            return try Data(contentsOf: path)
         } catch {
             throw Error.readFailed
         }
@@ -507,7 +531,7 @@ public final class File: FileSystem.Item, FileSystemIterable {
      */
     public func write(data: Data) throws {
         do {
-            try data.write(to: URL(fileURLWithPath: path))
+            try data.write(to: path)
         } catch {
             throw Error.writeFailed
         }
@@ -538,7 +562,7 @@ public final class File: FileSystem.Item, FileSystemIterable {
      */
     public func append(data: Data) throws {
         do {
-            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+            let handle = try FileHandle(forWritingTo: path)
             handle.seekToEndOfFile()
             handle.write(data)
             handle.closeFile()
@@ -571,10 +595,10 @@ public final class File: FileSystem.Item, FileSystemIterable {
      *  - throws: `FileSystem.Item.OperationError.copyFailed` if the file couldn't be copied
      */
     @discardableResult public func copy(to folder: Folder) throws -> File {
-        let newPath = folder.path + name
+        let newPath = folder.path.appendingPathComponent(name, isDirectory: false)
         
         do {
-            try fileManager.copyItem(atPath: path, toPath: newPath)
+            try fileManager.copyItem(at: path, to: newPath)
             return try File(path: newPath)
         } catch {
             throw OperationError.copyFailed(self)
@@ -588,6 +612,7 @@ public final class File: FileSystem.Item, FileSystemIterable {
  *  You initialize this class with a path, or by asking a folder to return a subfolder for a given name
  */
 public final class Folder: FileSystem.Item, FileSystemIterable {
+
     /// Error type specific to folder-related operations
     public enum Error: Swift.Error, CustomStringConvertible {
         /// Thrown when a folder couldn't be created
@@ -641,20 +666,28 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - throws: `FileSystemItem.Error` in case an empty path was given, or if the path given doesn't
      *    point to a readable folder.
      */
-    public init(path: String, using fileManager: FileManager = .default) throws {
-        var path = path
-        
-        if path.isEmpty {
-            path = fileManager.currentDirectoryPath
-        }
 
-        if !path.hasSuffix("/") {
-            path += "/"
+    public init(path: URL, using fileManager: FileManager = .default) throws {
+        var path = path
+        if path.path.isEmpty {
+            path = fileManager.currentDirectory
         }
-        
         try super.init(path: path, kind: .folder, using: fileManager)
     }
-    
+
+    public convenience init(path: URL? = nil, using fileManager: FileManager = .default) throws {
+        let path = path ?? fileManager.currentDirectory
+        try self.init(path: path, using: fileManager)
+    }
+
+    // TODO: Keep this public init around
+//    public init(path: String, using fileManager: FileManager = .default) throws {
+//        try self.init(path: <#T##URL?#>, using: <#T##FileManager#>)
+//        let url = url ?? fileManager.currentDirectory
+//
+//        try super.init(path: path, kind: .folder, using: fileManager)
+//    }
+
     /**
      *  Return a file with a given name that is contained in this folder
      *
@@ -663,7 +696,8 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - throws: `File.PathError.invalid` if the file couldn't be found
      */
     public func file(named fileName: String) throws -> File {
-        return try File(path: path + fileName, using: fileManager)
+        let filePath = path.appendingPathComponent(fileName, isDirectory: false)
+        return try File(path: filePath, using: fileManager)
     }
 
     /**
@@ -673,8 +707,20 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *
      *  - throws: `File.PathError.invalid` if the file couldn't be found
      */
+    // TODO: Deprecate
     public func file(atPath filePath: String) throws -> File {
-        return try File(path: path + filePath, using: fileManager)
+        let filePath = path.appendingPathComponent(filePath, isDirectory: false)
+        return try File(path: filePath, using: fileManager)
+    }
+
+    public func file(at url: URL) throws -> File {
+        let filePath: URL
+        if #available(OSX 10.11, *) {
+            filePath = URL(fileURLWithPath: url.path, isDirectory: false, relativeTo: path)
+        } else {
+            filePath = path.appendingPathComponent(url.path, isDirectory: false)
+        }
+        return try File(path: filePath, using: fileManager)
     }
 
     /**
@@ -694,7 +740,8 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - throws: `Folder.PathError.invalid` if the folder couldn't be found
      */
     public func subfolder(named folderName: String) throws -> Folder {
-        return try Folder(path: path + folderName, using: fileManager)
+        let folderPath = path.appendingPathComponent(folderName, isDirectory: true)
+        return try Folder(path: folderPath, using: fileManager)
     }
 
     /**
@@ -704,8 +751,20 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *
      *  - throws: `Folder.PathError.invalid` if the folder couldn't be found
      */
+    // TODO: Deprecate
     public func subfolder(atPath folderPath: String) throws -> Folder {
-        return try Folder(path: path + folderPath, using: fileManager)
+        let folderPath = path.appendingPathComponent(folderPath, isDirectory: true)
+        return try Folder(path: folderPath, using: fileManager)
+    }
+
+    public func subfolder(at url: URL) throws -> Folder {
+        let folderURL: URL
+        if #available(OSX 10.11, *) {
+            folderURL = URL(fileURLWithPath: url.path, isDirectory: true, relativeTo: path)
+        } else {
+            folderURL = path.appendingPathComponent(url.path, isDirectory: true)
+        }
+        return try Folder(path: folderURL, using: fileManager)
     }
 
     /**
@@ -728,9 +787,9 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - returns: The file that was created
      */
     @discardableResult public func createFile(named fileName: String, contents data: Data = .init()) throws -> File {
-        let filePath = path + fileName
-        
-        guard fileManager.createFile(atPath: filePath, contents: data, attributes: nil) else {
+        let filePath = path.appendingPathComponent(fileName, isDirectory: false)
+
+        guard fileManager.createFile(at: filePath, contents: data, attributes: nil) else {
             throw File.Error.writeFailed
         }
         
@@ -781,10 +840,10 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - returns: The folder that was created
      */
     @discardableResult public func createSubfolder(named folderName: String) throws -> Folder {
-        let subfolderPath = path + folderName
+        let subfolderPath = path.appendingPathComponent(folderName, isDirectory: true)
         
         do {
-            try fileManager.createDirectory(atPath: subfolderPath, withIntermediateDirectories: false, attributes: nil)
+            try fileManager.createDirectory(at: subfolderPath, withIntermediateDirectories: false, attributes: nil)
             return try Folder(path: subfolderPath, using: fileManager)
         } catch {
             throw Error.creatingFolderFailed
@@ -861,10 +920,10 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - throws: `FileSystem.Item.OperationError.copyFailed` if the folder couldn't be copied
      */
     @discardableResult public func copy(to folder: Folder) throws -> Folder {
-        let newPath = folder.path + name
+        let newPath = folder.path.appendingPathComponent(name, isDirectory: true)
         
         do {
-            try fileManager.copyItem(atPath: path, toPath: newPath)
+            try fileManager.copyItem(at: path, to: newPath)
             return try Folder(path: newPath)
         } catch {
             throw OperationError.copyFailed(self)
@@ -875,7 +934,7 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
 /// Protocol adopted by file system types that may be iterated over (this protocol is an implementation detail)
 public protocol FileSystemIterable {
     /// Initialize an instance with a path and a file manager
-    init(path: String, using fileManager: FileManager) throws
+    init(path: URL, using fileManager: FileManager) throws
 }
 
 /**
@@ -943,7 +1002,7 @@ public class FileSystemIterator<T: FileSystem.Item>: IteratorProtocol where T: F
     private let includeHidden: Bool
     private let fileManager: FileManager
     private lazy var itemNames: [String] = {
-        self.fileManager.itemNames(inFolderAtPath: self.folder.path)
+        self.fileManager.itemNames(inFolderAt: self.folder.path)
     }()
     private lazy var childIteratorQueue = [FileSystemIterator]()
     private var currentChildIterator: FileSystemIterator?
@@ -977,8 +1036,8 @@ public class FileSystemIterator<T: FileSystem.Item>: IteratorProtocol where T: F
         guard includeHidden || !nextItemName.hasPrefix(".") else {
             return next()
         }
-        
-        let nextItemPath = folder.path + nextItemName
+
+        let nextItemPath = folder.path.appendingPathComponent(nextItemName, isDirectory: nextItemName.hasSuffix("/"))
         let nextItem = try? T(path: nextItemPath, using: fileManager)
 
         if recursive, let folder = (nextItem as? Folder) ?? (try? Folder(path: nextItemPath))  {
@@ -1008,95 +1067,108 @@ private extension FileSystem.Item {
     }
 
     func loadModificationDate() -> Date {
-        let attributes = try! fileManager.attributesOfItem(atPath: path)
+        let attributes = try! fileManager.attributesOfItem(at: path)
         return attributes[FileAttributeKey.modificationDate] as! Date
     }
 }
 
 private extension FileManager {
-    func itemKind(atPath path: String) -> FileSystem.Item.Kind? {
-        var objCBool: ObjCBool = false
-        
-        guard fileExists(atPath: path, isDirectory: &objCBool) else {
+    func itemKind(at url: URL) -> FileSystem.Item.Kind? {
+        var isFolder: ObjCBool = false
+
+        guard fileExists(atPath: url.path, isDirectory: &isFolder) else {
             return nil
         }
 
-        if objCBool.boolValue {
-            return .folder
-        }
-        
-        return .file
+        return isFolder.boolValue ? .folder : .file
     }
     
-    func itemNames(inFolderAtPath path: String) -> [String] {
+    func itemNames(inFolderAt url: URL) -> [String] {
         do {
-            return try contentsOfDirectory(atPath: path).sorted()
+            return try contentsOfDirectory(atPath: url.path).sorted()
         } catch {
             return []
         }
     }
     
-    func absolutePath(for path: String) throws -> String {
-        if path.hasPrefix("/") {
-            return try pathByFillingInParentReferences(for: path)
-        }
-        
-        if path.hasPrefix("~") {
-            let prefixEndIndex = path.index(after: path.startIndex)
-            
-            let path = path.replacingCharacters(
-                in: path.startIndex..<prefixEndIndex,
-                with: ProcessInfo.processInfo.homeFolderPath
-            )
+    func absolutePath(for path: URL) throws -> URL {
 
-            return try pathByFillingInParentReferences(for: path)
-        }
+        return path.absoluteURL
 
-        return try pathByFillingInParentReferences(for: path, prependCurrentFolderPath: true)
+//        if path.path.hasPrefix("/") {
+//            return try pathByFillingInParentReferences(for: path)
+//        }
+//
+//        if path.path.hasPrefix("~") {
+//            let prefixEndIndex = path.path.index(after: path.path.startIndex)
+//
+//            let path = path.path.replacingCharacters(
+//                in: path.path.startIndex..<prefixEndIndex,
+//                with: ProcessInfo.processInfo.homeFolderPath
+//            )
+//
+//            return try pathByFillingInParentReferences(for: path)
+//        }
+//
+//        return try pathByFillingInParentReferences(for: path, prependCurrentFolderPath: true)
     }
 
-    func parentPath(for path: String) -> String? {
-        guard path != "/" else {
+    func parentPath(for path: URL) -> URL? {
+        if path.path == "/" {
             return nil
-        }
-
-        var pathComponents = path.pathComponents
-
-        if path.hasSuffix("/") {
-            pathComponents.removeLast(2)
         } else {
-            pathComponents.removeLast()
+            return path.deletingLastPathComponent()
         }
-
-        return pathComponents.joined(separator: "/")
     }
 
-    func pathByFillingInParentReferences(for path: String, prependCurrentFolderPath: Bool = false) throws -> String {
-        var path = path
-        var filledIn = false
+//    func pathByFillingInParentReferences(for path: URL, prependCurrentFolderPath: Bool = false) throws -> URL {
+//        var path = path
+//        var filledIn = false
+//
+//        while let parentReferenceRange = path.path.range(of: "../") {
+//            let currentFolderPath = String(path[..<parentReferenceRange.lowerBound])
+//
+//            guard let currentFolder = try? Folder(path: currentFolderPath) else {
+//                throw FileSystem.Item.PathError.invalid(path)
+//            }
+//
+//            guard let parent = currentFolder.parent else {
+//                throw FileSystem.Item.PathError.invalid(path)
+//            }
+//
+//            path = path.replacingCharacters(in: path.startIndex..<parentReferenceRange.upperBound, with: parent.path)
+//            filledIn = true
+//        }
+//
+//        if prependCurrentFolderPath {
+//            guard filledIn else {
+//                return currentDirectoryPath + "/" + path
+//            }
+//        }
+//
+//        return path
+//    }
+}
 
-        while let parentReferenceRange = path.range(of: "../") {
-            let currentFolderPath = String(path[..<parentReferenceRange.lowerBound])
+public extension FileManager {
+    var currentDirectory: URL {
+        return URL(fileURLWithPath: currentDirectoryPath, isDirectory: true)
+    }
 
-            guard let currentFolder = try? Folder(path: currentFolderPath) else {
-                throw FileSystem.Item.PathError.invalid(path)
-            }
+    func attributesOfItem(at url: URL) throws -> [FileAttributeKey : Any] {
+        return try attributesOfItem(atPath: url.path)
+    }
 
-            guard let parent = currentFolder.parent else {
-                throw FileSystem.Item.PathError.invalid(path)
-            }
+    func fileExists(at url: URL, isDirectory: UnsafeMutablePointer<ObjCBool>?) -> Bool {
+        return fileExists(atPath: url.path, isDirectory: isDirectory)
+    }
 
-            path = path.replacingCharacters(in: path.startIndex..<parentReferenceRange.upperBound, with: parent.path)
-            filledIn = true
-        }
+    func createFile(at url: URL, contents data: Data?, attributes attr: [FileAttributeKey : Any]? = nil) -> Bool {
+        return createFile(atPath: url.path, contents: data, attributes: attr)
+    }
 
-        if prependCurrentFolderPath {
-            guard filledIn else {
-                return currentDirectoryPath + "/" + path
-            }
-        }
-
-        return path
+    func changeCurrentDirectory(_ url: URL) -> Bool {
+        return changeCurrentDirectoryPath(url.path)
     }
 }
 
@@ -1112,6 +1184,39 @@ private extension ProcessInfo {
     }
 }
 
+//infix operator +/
+//infix operator +>
+//
+//private extension URL {
+//
+//    // File path component
+//
+//    static func + (lhs: URL, rhs: String) -> URL {
+//        return lhs.appendingPathComponent(rhs, isDirectory: false)
+//    }
+//
+//    static func + (lhs: URL, rhs: URL) -> URL {
+//        return lhs + rhs.path
+//    }
+//
+//    // Directory path component
+//
+//    static func +/ (lhs: URL, rhs: String) -> URL {
+//        return lhs.appendingPathComponent(rhs, isDirectory: true)
+//    }
+//
+//    static func +/ (lhs: URL, rhs: URL) -> URL {
+//        return lhs +/ rhs.path
+//    }
+//
+//    // Extension path component
+//
+//    static func +> (lhs: URL, rhs: String) -> URL {
+//        return lhs.appendingPathExtension(rhs)
+//    }
+//
+//}
+
 #if os(Linux) && !(swift(>=4.1))
 private extension ObjCBool {
     var boolValue: Bool { return Bool(self) }
@@ -1126,7 +1231,7 @@ extension FileSystem {
             return nil
         }
         
-        return try? Folder(path: url.path, using: fileManager)
+        return try? Folder(path: url, using: fileManager)
     }
     
     /// A reference to the library folder used by this file system.
@@ -1135,7 +1240,7 @@ extension FileSystem {
             return nil
         }
         
-        return try? Folder(path: url.path, using: fileManager)
+        return try? Folder(path: url, using: fileManager)
     }
 }
 #endif
