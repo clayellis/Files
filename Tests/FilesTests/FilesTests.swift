@@ -179,6 +179,7 @@ class FilesTests: XCTestCase {
             // Move to the subfolder
             XCTAssertNotEqual(FileManager.default.currentDirectory, subfolder.url)
             XCTAssertTrue(FileManager.default.changeCurrentDirectory(subfolder.url))
+            XCTAssertEqual(FileManager.default.currentDirectory, subfolder.url)
 
             try XCTAssertEqual(File(path: "../file"), file)
         }
@@ -579,8 +580,20 @@ class FilesTests: XCTestCase {
 
     func testAccessingCurrentWorkingDirectory() {
         performTest {
+            // FIXME: This test is failing but might be a special case.
+            // We're using URL.standardizedFileURL internally to expand urls.
+            // The issue is that standardizedFileURL strips "/private" from the path
+            // according to its documentation https://developer.apple.com/documentation/foundation/nsurl/1414302-standardizingpath
+            // This test is operating out of "/private" so it gets stripped
+            // The failure reason on this test is slightly misleading.
+            // It reads: XCTAssertEqual failed: ("file:///private/tmp/") is not equal to (" -- file:///private/tmp/")
+            // But if you print the second url out, you'll see that private has indeed been stripped.
+            // So, rightfully, file:///private/tmp/ != file:///tmp/
+            // We need to find the correct way to handle this
+            // We should continue using standardizedFileURL whatever the solution is.
             let folder = try Folder(path: "")
-            XCTAssertEqual(FileManager.default.currentDirectory, folder.url.absoluteURL)
+            XCTAssertEqual(FileManager.default.currentDirectoryPath, folder.url.path)
+            XCTAssertEqual(FileManager.default.currentDirectory, folder.url)
             XCTAssertEqual(FileSystem().currentFolder, folder)
             XCTAssertEqual(Folder.current, folder)
         }
@@ -801,17 +814,13 @@ extension FilesTests {
 
 extension URL: ExpressibleByStringLiteral {
     public init(stringLiteral value: StaticString) {
-        self = URL(fileURLWithPath: NSString(stringLiteral: value).expandingTildeInPath)
+        self = URL(fileURLWithPath: NSString(stringLiteral: value).standardizingPath)
     }
 }
 
-private extension URL {
-    static func + (lhs: URL, rhs: String) -> URL {
+extension URL {
+    static func +(lhs: URL, rhs: String) -> URL {
         let isDirectory = rhs.hasSuffix("/")
         return lhs.appendingPathComponent(rhs, isDirectory: isDirectory)
     }
-
-//    static func + (lhs: URL, rhs: URL) -> URL {
-//        return lhs + rhs.path
-//    }
 }

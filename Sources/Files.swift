@@ -165,7 +165,7 @@ public class FileSystem {
                 return false
             }
 
-            return lhs.url == rhs.url
+            return lhs.url.absoluteURL == rhs.url.absoluteURL
         }
 
         /// The url of the item
@@ -234,13 +234,11 @@ public class FileSystem {
                 throw PathError.empty
             }
 
-            let path = try fileManager.absolutePath(for: path)
-
             guard fileManager.itemKind(at: path) == kind else {
                 throw PathError.invalid(path)
             }
 
-            self.url = path.standardized
+            self.url = path.standardizedFileURL
             self.fileManager = fileManager
             self.kind = kind
             self.name = path.lastPathComponent
@@ -292,12 +290,6 @@ public class FileSystem {
          */
         public func move(to newParent: Folder) throws {
             let newPath = newParent.url.appendingPathComponent(name, isDirectory: kind == .folder)
-
-//            var newPath = newParent.path + name
-//
-//            if kind == .folder && !newPath.hasSuffix("/") {
-//                newPath += "/"
-//            }
 
             do {
                 try fileManager.moveItem(at: url, to: newPath)
@@ -370,15 +362,11 @@ public class FileSystem {
      *  - returns: The file that was created
      */
     @discardableResult public func createFile(at path: URL, contents: Data = Data()) throws -> File {
-        let path = try fileManager.absolutePath(for: path)
-
         guard let parentPath = fileManager.parentPath(for: path) else {
             throw File.Error.writeFailed
         }
 
         do {
-//            let index = path.index(path.startIndex, offsetBy: parentPath.count + 1)
-//            let name = String(path[index...])
             let name = path.lastPathComponent
             return try createFolder(at: parentPath).createFile(named: name, contents: contents)
         } catch {
@@ -416,7 +404,6 @@ public class FileSystem {
      */
     @discardableResult public func createFolder(at path: URL) throws -> Folder {
         do {
-            let path = try fileManager.absolutePath(for: path)
             try fileManager.createDirectory(at: path, withIntermediateDirectories: true, attributes: nil)
             return try Folder(path: path, using: fileManager)
         } catch {
@@ -1095,28 +1082,6 @@ private extension FileManager {
             return []
         }
     }
-    
-    func absolutePath(for path: URL) throws -> URL {
-
-        return path.absoluteURL
-
-//        if path.path.hasPrefix("/") {
-//            return try pathByFillingInParentReferences(for: path)
-//        }
-//
-//        if path.path.hasPrefix("~") {
-//            let prefixEndIndex = path.path.index(after: path.path.startIndex)
-//
-//            let path = path.path.replacingCharacters(
-//                in: path.path.startIndex..<prefixEndIndex,
-//                with: ProcessInfo.processInfo.homeFolderPath
-//            )
-//
-//            return try pathByFillingInParentReferences(for: path)
-//        }
-//
-//        return try pathByFillingInParentReferences(for: path, prependCurrentFolderPath: true)
-    }
 
     func parentPath(for path: URL) -> URL? {
         if path.path == "/" {
@@ -1125,34 +1090,6 @@ private extension FileManager {
             return path.deletingLastPathComponent()
         }
     }
-
-//    func pathByFillingInParentReferences(for path: URL, prependCurrentFolderPath: Bool = false) throws -> URL {
-//        var path = path
-//        var filledIn = false
-//
-//        while let parentReferenceRange = path.path.range(of: "../") {
-//            let currentFolderPath = String(path[..<parentReferenceRange.lowerBound])
-//
-//            guard let currentFolder = try? Folder(path: currentFolderPath) else {
-//                throw FileSystem.Item.PathError.invalid(path)
-//            }
-//
-//            guard let parent = currentFolder.parent else {
-//                throw FileSystem.Item.PathError.invalid(path)
-//            }
-//
-//            path = path.replacingCharacters(in: path.startIndex..<parentReferenceRange.upperBound, with: parent.path)
-//            filledIn = true
-//        }
-//
-//        if prependCurrentFolderPath {
-//            guard filledIn else {
-//                return currentDirectoryPath + "/" + path
-//            }
-//        }
-//
-//        return path
-//    }
 }
 
 public extension FileManager {
@@ -1188,39 +1125,6 @@ private extension ProcessInfo {
         return environment["HOME"]!
     }
 }
-
-//infix operator +/
-//infix operator +>
-//
-//private extension URL {
-//
-//    // File path component
-//
-//    static func + (lhs: URL, rhs: String) -> URL {
-//        return lhs.appendingPathComponent(rhs, isDirectory: false)
-//    }
-//
-//    static func + (lhs: URL, rhs: URL) -> URL {
-//        return lhs + rhs.path
-//    }
-//
-//    // Directory path component
-//
-//    static func +/ (lhs: URL, rhs: String) -> URL {
-//        return lhs.appendingPathComponent(rhs, isDirectory: true)
-//    }
-//
-//    static func +/ (lhs: URL, rhs: URL) -> URL {
-//        return lhs +/ rhs.path
-//    }
-//
-//    // Extension path component
-//
-//    static func +> (lhs: URL, rhs: String) -> URL {
-//        return lhs.appendingPathExtension(rhs)
-//    }
-//
-//}
 
 #if os(Linux) && !(swift(>=4.1))
 private extension ObjCBool {
