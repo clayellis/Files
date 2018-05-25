@@ -168,8 +168,13 @@ public class FileSystem {
             return lhs.url == rhs.url
         }
 
-        /// The path of the item, relative to the root of the file system
+        /// The url of the item
         public private(set) var url: URL
+
+        /// The path of the item, relative to the root of the file system
+        public var path: String {
+            return url.path
+        }
         
         /// The name of the item (including any extension)
         public private(set) var name: String
