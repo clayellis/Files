@@ -56,13 +56,13 @@ class FilesTests: XCTestCase {
             // Create a file and verify its properties
             let file = try folder.createFile(named: "test.txt")
             XCTAssertEqual(file.name, "test.txt")
-            XCTAssertEqual(file.path, folder.path + "test.txt")
+            XCTAssertEqual(file.url, folder.url + "test.txt")
             XCTAssertEqual(file.extension, "txt")
             XCTAssertEqual(file.nameExcludingExtension, "test")
             try XCTAssertEqual(file.read(), Data())
             
             // You should now be able to access the file using its path and through the parent
-            _ = try File(path: file.path)
+            _ = try File(path: file.url)
             XCTAssertTrue(folder.containsFile(named: "test.txt"))
 
             try file.delete()
@@ -71,7 +71,7 @@ class FilesTests: XCTestCase {
             try assert(file.read(), throwsError: File.Error.readFailed)
             
             // Attempting to create a File instance with the path should now also fail
-            try assert(File(path: file.path), throwsError: File.PathError.invalid(file.path))
+            try assert(File(path: file.url), throwsError: File.PathError.invalid(file.url))
         }
     }
     
@@ -83,10 +83,10 @@ class FilesTests: XCTestCase {
             // Create a folder and verify its properties
             let subfolder = try folder.createSubfolder(named: "folder")
             XCTAssertEqual(subfolder.name, "folder")
-            XCTAssertEqual(subfolder.path, folder.path + "folder/")
+            XCTAssertEqual(subfolder.url, folder.url + "folder/")
             
             // You should now be able to access the folder using its path and through the parent
-            _ = try Folder(path: subfolder.path)
+            _ = try Folder(path: subfolder.url)
             XCTAssertTrue(folder.containsSubfolder(named: "folder"))
             
             // Put a file in the folder
@@ -96,7 +96,7 @@ class FilesTests: XCTestCase {
             try subfolder.delete()
             
             // Attempting to create a Folder instance with the path should now fail
-            try assert(Folder(path: subfolder.path), throwsError: Folder.PathError.invalid(subfolder.path))
+            try assert(Folder(path: subfolder.url), throwsError: Folder.PathError.invalid(subfolder.url))
             
             // The file contained in the folder should now also be deleted
             try assert(file.read(), throwsError: File.Error.readFailed)
@@ -125,13 +125,13 @@ class FilesTests: XCTestCase {
             let file = try folder.createFile(named: "file.json")
             try file.rename(to: "renamedFile")
             XCTAssertEqual(file.name, "renamedFile.json")
-            XCTAssertEqual(file.path, folder.path + "renamedFile.json")
+            XCTAssertEqual(file.url, folder.url + "renamedFile.json")
             XCTAssertEqual(file.extension, "json")
             
             // Now try renaming the file, replacing its extension
             try file.rename(to: "other.txt", keepExtension: false)
             XCTAssertEqual(file.name, "other.txt")
-            XCTAssertEqual(file.path, folder.path + "other.txt")
+            XCTAssertEqual(file.url, folder.url + "other.txt")
             XCTAssertEqual(file.extension, "txt")
         }
     }
@@ -141,7 +141,7 @@ class FilesTests: XCTestCase {
             let file = try folder.createFile(named: "file.json")
             try file.rename(to: "renamedFile.json")
             XCTAssertEqual(file.name, "renamedFile.json")
-            XCTAssertEqual(file.path, folder.path + "renamedFile.json")
+            XCTAssertEqual(file.url, folder.url + "renamedFile.json")
             XCTAssertEqual(file.extension, "json")
         }
     }
@@ -151,9 +151,9 @@ class FilesTests: XCTestCase {
             try folder.createFile(named: "file")
             
             // Make sure we're not already in the file's parent directory
-            XCTAssertNotEqual(FileManager.default.currentDirectory, folder.path)
+            XCTAssertNotEqual(FileManager.default.currentDirectory, folder.url)
             
-            XCTAssertTrue(FileManager.default.changeCurrentDirectory(folder.path))
+            XCTAssertTrue(FileManager.default.changeCurrentDirectory(folder.url))
             let file = try File(name: "file")
             try XCTAssertEqual(file.read(), Data())
         }
@@ -164,7 +164,7 @@ class FilesTests: XCTestCase {
             try folder.createFile(named: "File")
             let file = try File(path: "~/.filesTest/File")
             try XCTAssertEqual(file.read(), Data())
-            XCTAssertEqual(file.path, folder.path + "File")
+            XCTAssertEqual(file.url, folder.url + "File")
 
             // Cleanup since we're performing a test in the actual home folder
             try file.delete()
@@ -177,8 +177,8 @@ class FilesTests: XCTestCase {
             let file = try folder.createFile(named: "file")
 
             // Move to the subfolder
-            XCTAssertNotEqual(FileManager.default.currentDirectory, subfolder.path)
-            XCTAssertTrue(FileManager.default.changeCurrentDirectory(subfolder.path))
+            XCTAssertNotEqual(FileManager.default.currentDirectory, subfolder.url)
+            XCTAssertTrue(FileManager.default.changeCurrentDirectory(subfolder.url))
 
             try XCTAssertEqual(File(path: "../file"), file)
         }
@@ -191,7 +191,7 @@ class FilesTests: XCTestCase {
             let subfolderC = try folder.createSubfolder(named: "C")
             let file = try subfolderC.createFile(named: "file")
 
-            try XCTAssertEqual(File(path: subfolderA.path + "../B/../C/file"), file)
+            try XCTAssertEqual(File(path: subfolderA.url + "../B/../C/file"), file)
         }
     }
     
@@ -200,7 +200,7 @@ class FilesTests: XCTestCase {
             let subfolder = try folder.createSubfolder(named: "folder")
             try subfolder.rename(to: "renamedFolder")
             XCTAssertEqual(subfolder.name, "renamedFolder")
-            XCTAssertEqual(subfolder.path, folder.path + "renamedFolder/")
+            XCTAssertEqual(subfolder.url, folder.url + "renamedFolder/")
         }
     }
 
@@ -505,14 +505,14 @@ class FilesTests: XCTestCase {
     func testFileDescription() {
         performTest {
             let file = try folder.createFile(named: "file")
-            XCTAssertEqual(file.description, "File(name: file, path: \(folder.path.path)/file)")
+            XCTAssertEqual(file.description, "File(name: file, path: \(folder.url.path)/file)")
         }
     }
     
     func testFolderDescription() {
         performTest {
             let subfolder = try folder.createSubfolder(named: "folder")
-            XCTAssertEqual(subfolder.description, "Folder(name: folder, path: \(folder.path.path)/folder)")
+            XCTAssertEqual(subfolder.description, "Folder(name: folder, path: \(folder.url.path)/folder)")
         }
     }
 
@@ -580,7 +580,7 @@ class FilesTests: XCTestCase {
     func testAccessingCurrentWorkingDirectory() {
         performTest {
             let folder = try Folder(path: "")
-            XCTAssertEqual(FileManager.default.currentDirectory, folder.path.absoluteURL)
+            XCTAssertEqual(FileManager.default.currentDirectory, folder.url.absoluteURL)
             XCTAssertEqual(FileSystem().currentFolder, folder)
             XCTAssertEqual(Folder.current, folder)
         }
@@ -596,12 +596,12 @@ class FilesTests: XCTestCase {
     func testCreatingFileFromFileSystem() {
         performTest {
             let fileName = "three"
-            let filePath = folder.path + "one/two/\(fileName)"
+            let filePath = folder.url + "one/two/\(fileName)"
             let contents = Data()
             let file = try FileSystem().createFile(at: filePath, contents: contents)
 
             XCTAssertEqual(file.name, fileName)
-            XCTAssertEqual(file.path, filePath)
+            XCTAssertEqual(file.url, filePath)
 
             try XCTAssertEqual(File(path: filePath).read(), contents)
         }
@@ -609,7 +609,7 @@ class FilesTests: XCTestCase {
 
     func testCreateFileFromFileSystemIfNeeded() {
         performTest {
-            let path = folder.path + "one/two/three/file"
+            let path = folder.url + "one/two/three/file"
             let contentA = "Hello".data(using: .utf8)!
             let contentB = "World".data(using: .utf8)!
             let fileA = try FileSystem().createFileIfNeeded(at: path, contents: contentA)
@@ -622,7 +622,7 @@ class FilesTests: XCTestCase {
 
     func testCreatingFolderFromFileSystem() {
         performTest {
-            let folderPath = folder.path + "one/two/three"
+            let folderPath = folder.url + "one/two/three"
             try FileSystem().createFolder(at: folderPath)
             _ = try Folder(path: folderPath)
         }
@@ -650,9 +650,9 @@ class FilesTests: XCTestCase {
 
     func testCreateFolderIfNeeded() {
         performTest {
-            let subfolderA = try FileSystem().createFolderIfNeeded(at: folder.path + "one/two/three")
+            let subfolderA = try FileSystem().createFolderIfNeeded(at: folder.url + "one/two/three")
             try subfolderA.createFile(named: "file")
-            let subfolderB = try FileSystem().createFolderIfNeeded(at: subfolderA.path)
+            let subfolderB = try FileSystem().createFolderIfNeeded(at: subfolderA.url)
             XCTAssertEqual(subfolderA, subfolderB)
             XCTAssertEqual(subfolderA.files.count, subfolderB.files.count)
             XCTAssertEqual(subfolderA.files.first, subfolderB.files.first)
@@ -699,7 +699,7 @@ class FilesTests: XCTestCase {
         
             // Mock that no files exist, which should call file lookups to fail
             fileManager.noFilesExist = true
-            try assert(subfolder.file(named: "file"), throwsError: File.PathError.invalid(file.path))
+            try assert(subfolder.file(named: "file"), throwsError: File.PathError.invalid(file.url))
         }
     }
     

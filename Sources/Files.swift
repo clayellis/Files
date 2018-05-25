@@ -165,11 +165,11 @@ public class FileSystem {
                 return false
             }
 
-            return lhs.path.absoluteURL == rhs.path.absoluteURL
+            return lhs.url == rhs.url
         }
-        
+
         /// The path of the item, relative to the root of the file system
-        public private(set) var path: URL
+        public private(set) var url: URL
         
         /// The name of the item (including any extension)
         public private(set) var name: String
@@ -186,7 +186,7 @@ public class FileSystem {
         
         /// Any extension that the item has
         public var `extension`: String? {
-            let ext = path.pathExtension
+            let ext = url.pathExtension
             if ext.isEmpty {
                 return nil
             } else {
@@ -199,14 +199,14 @@ public class FileSystem {
 
         /// The folder that the item is contained in, or `nil` if this item is the root folder of the file system
         public var parent: Folder? {
-            return fileManager.parentPath(for: path).flatMap { parentPath in
+            return fileManager.parentPath(for: url).flatMap { parentPath in
                 return try? Folder(path: parentPath, using: fileManager)
             }
         }
         
         /// A string describing the item
         public var description: String {
-            return "\(kind)(name: \(name), path: \(path.path))"
+            return "\(kind)(name: \(name), path: \(url.path))"
         }
         
         fileprivate let kind: Kind
@@ -235,7 +235,7 @@ public class FileSystem {
                 throw PathError.invalid(path)
             }
 
-            self.path = path.standardized
+            self.url = path.standardized
             self.fileManager = fileManager
             self.kind = kind
             self.name = path.lastPathComponent
@@ -266,13 +266,13 @@ public class FileSystem {
                 }
             }
 
-            let newPath = parent.path.appendingPathComponent(newName, isDirectory: kind == .folder)
+            let newPath = parent.url.appendingPathComponent(newName, isDirectory: kind == .folder)
 
             do {
-                try fileManager.moveItem(at: path, to: newPath)
+                try fileManager.moveItem(at: url, to: newPath)
                 
                 name = newName
-                path = newPath
+                url = newPath
             } catch {
                 throw OperationError.renameFailed(self)
             }
@@ -286,7 +286,7 @@ public class FileSystem {
          *  - throws: `FileSystem.Item.OperationError.moveFailed` if the item couldn't be moved
          */
         public func move(to newParent: Folder) throws {
-            let newPath = newParent.path.appendingPathComponent(name, isDirectory: kind == .folder)
+            let newPath = newParent.url.appendingPathComponent(name, isDirectory: kind == .folder)
 
 //            var newPath = newParent.path + name
 //
@@ -295,8 +295,8 @@ public class FileSystem {
 //            }
 
             do {
-                try fileManager.moveItem(at: path, to: newPath)
-                path = newPath
+                try fileManager.moveItem(at: url, to: newPath)
+                url = newPath
             } catch {
                 throw OperationError.moveFailed(self)
             }
@@ -311,7 +311,7 @@ public class FileSystem {
          */
         public func delete() throws {
             do {
-                try fileManager.removeItem(at: path)
+                try fileManager.removeItem(at: url)
             } catch {
                 throw OperationError.deleteFailed(self)
             }
@@ -490,7 +490,7 @@ public final class File: FileSystem.Item, FileSystemIterable {
      */
     public func read() throws -> Data {
         do {
-            return try Data(contentsOf: path)
+            return try Data(contentsOf: url)
         } catch {
             throw Error.readFailed
         }
@@ -531,7 +531,7 @@ public final class File: FileSystem.Item, FileSystemIterable {
      */
     public func write(data: Data) throws {
         do {
-            try data.write(to: path)
+            try data.write(to: url)
         } catch {
             throw Error.writeFailed
         }
@@ -562,7 +562,7 @@ public final class File: FileSystem.Item, FileSystemIterable {
      */
     public func append(data: Data) throws {
         do {
-            let handle = try FileHandle(forWritingTo: path)
+            let handle = try FileHandle(forWritingTo: url)
             handle.seekToEndOfFile()
             handle.write(data)
             handle.closeFile()
@@ -595,10 +595,10 @@ public final class File: FileSystem.Item, FileSystemIterable {
      *  - throws: `FileSystem.Item.OperationError.copyFailed` if the file couldn't be copied
      */
     @discardableResult public func copy(to folder: Folder) throws -> File {
-        let newPath = folder.path.appendingPathComponent(name, isDirectory: false)
+        let newPath = folder.url.appendingPathComponent(name, isDirectory: false)
         
         do {
-            try fileManager.copyItem(at: path, to: newPath)
+            try fileManager.copyItem(at: url, to: newPath)
             return try File(path: newPath)
         } catch {
             throw OperationError.copyFailed(self)
@@ -696,7 +696,7 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - throws: `File.PathError.invalid` if the file couldn't be found
      */
     public func file(named fileName: String) throws -> File {
-        let filePath = path.appendingPathComponent(fileName, isDirectory: false)
+        let filePath = url.appendingPathComponent(fileName, isDirectory: false)
         return try File(path: filePath, using: fileManager)
     }
 
@@ -709,16 +709,16 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      */
     // TODO: Deprecate
     public func file(atPath filePath: String) throws -> File {
-        let filePath = path.appendingPathComponent(filePath, isDirectory: false)
+        let filePath = url.appendingPathComponent(filePath, isDirectory: false)
         return try File(path: filePath, using: fileManager)
     }
 
     public func file(at url: URL) throws -> File {
         let filePath: URL
         if #available(OSX 10.11, *) {
-            filePath = URL(fileURLWithPath: url.path, isDirectory: false, relativeTo: path)
+            filePath = URL(fileURLWithPath: url.path, isDirectory: false, relativeTo: url)
         } else {
-            filePath = path.appendingPathComponent(url.path, isDirectory: false)
+            filePath = url.appendingPathComponent(url.path, isDirectory: false)
         }
         return try File(path: filePath, using: fileManager)
     }
@@ -740,7 +740,7 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - throws: `Folder.PathError.invalid` if the folder couldn't be found
      */
     public func subfolder(named folderName: String) throws -> Folder {
-        let folderPath = path.appendingPathComponent(folderName, isDirectory: true)
+        let folderPath = url.appendingPathComponent(folderName, isDirectory: true)
         return try Folder(path: folderPath, using: fileManager)
     }
 
@@ -753,16 +753,16 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      */
     // TODO: Deprecate
     public func subfolder(atPath folderPath: String) throws -> Folder {
-        let folderPath = path.appendingPathComponent(folderPath, isDirectory: true)
+        let folderPath = url.appendingPathComponent(folderPath, isDirectory: true)
         return try Folder(path: folderPath, using: fileManager)
     }
 
     public func subfolder(at url: URL) throws -> Folder {
         let folderURL: URL
         if #available(OSX 10.11, *) {
-            folderURL = URL(fileURLWithPath: url.path, isDirectory: true, relativeTo: path)
+            folderURL = URL(fileURLWithPath: url.path, isDirectory: true, relativeTo: url)
         } else {
-            folderURL = path.appendingPathComponent(url.path, isDirectory: true)
+            folderURL = url.appendingPathComponent(url.path, isDirectory: true)
         }
         return try Folder(path: folderURL, using: fileManager)
     }
@@ -787,7 +787,7 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - returns: The file that was created
      */
     @discardableResult public func createFile(named fileName: String, contents data: Data = .init()) throws -> File {
-        let filePath = path.appendingPathComponent(fileName, isDirectory: false)
+        let filePath = url.appendingPathComponent(fileName, isDirectory: false)
 
         guard fileManager.createFile(at: filePath, contents: data, attributes: nil) else {
             throw File.Error.writeFailed
@@ -840,7 +840,7 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - returns: The folder that was created
      */
     @discardableResult public func createSubfolder(named folderName: String) throws -> Folder {
-        let subfolderPath = path.appendingPathComponent(folderName, isDirectory: true)
+        let subfolderPath = url.appendingPathComponent(folderName, isDirectory: true)
         
         do {
             try fileManager.createDirectory(at: subfolderPath, withIntermediateDirectories: false, attributes: nil)
@@ -920,10 +920,10 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - throws: `FileSystem.Item.OperationError.copyFailed` if the folder couldn't be copied
      */
     @discardableResult public func copy(to folder: Folder) throws -> Folder {
-        let newPath = folder.path.appendingPathComponent(name, isDirectory: true)
+        let newPath = folder.url.appendingPathComponent(name, isDirectory: true)
         
         do {
-            try fileManager.copyItem(at: path, to: newPath)
+            try fileManager.copyItem(at: url, to: newPath)
             return try Folder(path: newPath)
         } catch {
             throw OperationError.copyFailed(self)
@@ -1002,7 +1002,7 @@ public class FileSystemIterator<T: FileSystem.Item>: IteratorProtocol where T: F
     private let includeHidden: Bool
     private let fileManager: FileManager
     private lazy var itemNames: [String] = {
-        self.fileManager.itemNames(inFolderAt: self.folder.path)
+        self.fileManager.itemNames(inFolderAt: self.folder.url)
     }()
     private lazy var childIteratorQueue = [FileSystemIterator]()
     private var currentChildIterator: FileSystemIterator?
@@ -1037,7 +1037,7 @@ public class FileSystemIterator<T: FileSystem.Item>: IteratorProtocol where T: F
             return next()
         }
 
-        let nextItemPath = folder.path.appendingPathComponent(nextItemName, isDirectory: nextItemName.hasSuffix("/"))
+        let nextItemPath = folder.url.appendingPathComponent(nextItemName, isDirectory: nextItemName.hasSuffix("/"))
         let nextItem = try? T(path: nextItemPath, using: fileManager)
 
         if recursive, let folder = (nextItem as? Folder) ?? (try? Folder(path: nextItemPath))  {
@@ -1067,7 +1067,7 @@ private extension FileSystem.Item {
     }
 
     func loadModificationDate() -> Date {
-        let attributes = try! fileManager.attributesOfItem(at: path)
+        let attributes = try! fileManager.attributesOfItem(at: url)
         return attributes[FileAttributeKey.modificationDate] as! Date
     }
 }
