@@ -269,13 +269,13 @@ public class FileSystem {
                 }
             }
 
-            let newPath = parent.url.appendingPathComponent(newName, isDirectory: kind == .folder)
+            let newURL = parent.url.appendingPathComponent(newName, isDirectory: kind == .folder)
 
             do {
-                try fileManager.moveItem(at: url, to: newPath)
+                try fileManager.moveItem(at: url, to: newURL)
                 
                 name = newName
-                url = newPath
+                url = newURL
             } catch {
                 throw OperationError.renameFailed(self)
             }
@@ -289,11 +289,11 @@ public class FileSystem {
          *  - throws: `FileSystem.Item.OperationError.moveFailed` if the item couldn't be moved
          */
         public func move(to newParent: Folder) throws {
-            let newPath = newParent.url.appendingPathComponent(name, isDirectory: kind == .folder)
+            let newURL = newParent.url.appendingPathComponent(name, isDirectory: kind == .folder)
 
             do {
-                try fileManager.moveItem(at: url, to: newPath)
-                url = newPath
+                try fileManager.moveItem(at: url, to: newURL)
+                url = newURL
             } catch {
                 throw OperationError.moveFailed(self)
             }
@@ -591,11 +591,11 @@ public final class File: FileSystem.Item, FileSystemIterable {
      *  - throws: `FileSystem.Item.OperationError.copyFailed` if the file couldn't be copied
      */
     @discardableResult public func copy(to folder: Folder) throws -> File {
-        let newPath = folder.url.appendingPathComponent(name, isDirectory: false)
-        
+        let newURL = folder.url.appendingPathComponent(name, isDirectory: false)
+
         do {
-            try fileManager.copyItem(at: url, to: newPath)
-            return try File(url: newPath)
+            try fileManager.copyItem(at: url, to: newURL)
+            return try File(url: newURL)
         } catch {
             throw OperationError.copyFailed(self)
         }
@@ -653,15 +653,13 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
     }
     
     /**
-     *  Initialize an instance of this class with a path pointing to a folder
+     *  Initialize an instance of this class with a url pointing to a folder
      *
-     *  - parameter path: The path of the folder to create a representation of
+     *  - parameter path: The url of the folder to create a representation of
      *  - parameter fileManager: Optionally give a custom file manager to use to look up the folder
      *
-     *  - throws: `FileSystemItem.Error` in case an empty path was given, or if the path given doesn't
-     *    point to a readable folder.
+     *  - throws: `FileSystemItem.Error` if the url given doesn't point to a readable folder.
      */
-
     public init(url: URL, using fileManager: FileManager = .default) throws {
         var url = url
         if url.path.isEmpty {
@@ -670,6 +668,14 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
         try super.init(url: url, kind: .folder, using: fileManager)
     }
 
+    /**
+     *  Initialize an instance of this class with a path pointing to a folder
+     *
+     *  - parameter path: The path of the folder to create a representation of
+     *  - parameter fileManager: Optionally give a custom file manager to use to look up the folder
+     *
+     *  - throws: `FileSystemItem.Error` if the path given doesn't point to a readable folder.
+     */
     public init(path: String, using fileManager: FileManager = .default) throws {
         var path = path
         if path.isEmpty {
@@ -703,6 +709,13 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
         return try File(url: filePath, using: fileManager)
     }
 
+    /**
+     *  Return a file at a given url that is contained in this folder's tree
+     *
+     *  - parameter filePath: The url of the file to return. Relative to this folder.
+     *
+     *  - throws: `File.PathError.invalid` if the file couldn't be found
+     */
     public func file(at url: URL) throws -> File {
         let filePath: URL
         if #available(OSX 10.11, *) {
@@ -741,12 +754,18 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *
      *  - throws: `Folder.PathError.invalid` if the folder couldn't be found
      */
-    // TODO: Deprecate
     public func subfolder(atPath folderPath: String) throws -> Folder {
         let folderPath = url.appendingPathComponent(folderPath, isDirectory: true)
         return try Folder(url: folderPath, using: fileManager)
     }
 
+    /**
+     *  Return a folder at a given url that is contained in this folder's tree
+     *
+     *  - parameter url: The url of the folder to return. Relative to this folder.
+     *
+     *  - throws: `Folder.PathError.invalid` if the folder couldn't be found
+     */
     public func subfolder(at url: URL) throws -> Folder {
         let folderURL: URL
         if #available(OSX 10.11, *) {
@@ -911,11 +930,11 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *  - throws: `FileSystem.Item.OperationError.copyFailed` if the folder couldn't be copied
      */
     @discardableResult public func copy(to folder: Folder) throws -> Folder {
-        let newPath = folder.url.appendingPathComponent(name, isDirectory: true)
+        let newURL = folder.url.appendingPathComponent(name, isDirectory: true)
         
         do {
-            try fileManager.copyItem(at: url, to: newPath)
-            return try Folder(url: newPath)
+            try fileManager.copyItem(at: url, to: newURL)
+            return try Folder(url: newURL)
         } catch {
             throw OperationError.copyFailed(self)
         }
@@ -1117,10 +1136,6 @@ public extension FileManager {
 }
 
 private extension String {
-    var pathComponents: [String] {
-        return components(separatedBy: "/")
-    }
-
     var fileURL: URL {
         return URL(fileURLWithPath: NSString(string: self).standardizingPath)
     }
