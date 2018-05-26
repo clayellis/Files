@@ -908,16 +908,15 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
         try makeFileSequence(includeHidden: includeHidden).forEach { try $0.move(to: newParent) }
         try makeSubfolderSequence(includeHidden: includeHidden).forEach { try $0.move(to: newParent) }
     }
-    
+
     /**
-     *  Empty this folder, removing all of its content
+     *  Deletes the contents of this folder
      *
-     *  - parameter includeHidden: Whether hidden files (dot) files contained within the folder should also be removed
+     *  - parameter includeHidden: Whether hidden files (dot) files contained within the folder should also be deleted
      *
      *  This will still keep the folder itself on disk. If you wish to delete the folder as well, call `delete()` on it.
      */
-    // TODO: Deprecate this and rename it deleteContents()
-    public func empty(includeHidden: Bool = false) throws {
+    public func deleteContents(includeHidden: Bool = false) throws {
         try makeFileSequence(includeHidden: includeHidden).forEach { try $0.delete() }
         try makeSubfolderSequence(includeHidden: includeHidden).forEach { try $0.delete() }
     }
@@ -939,6 +938,11 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
             throw OperationError.copyFailed(self)
         }
     }
+}
+
+extension Folder {
+    @available (*, unavailable, renamed: "deleteContents")
+    public func empty(includeHidden: Bool = false) throws {}
 }
 
 /// Protocol adopted by file system types that may be iterated over (this protocol is an implementation detail)
