@@ -62,7 +62,7 @@ class FilesTests: XCTestCase {
             try XCTAssertEqual(file.read(), Data())
             
             // You should now be able to access the file using its path and through the parent
-            _ = try File(path: file.url)
+            _ = try File(url: file.url)
             XCTAssertTrue(folder.containsFile(named: "test.txt"))
 
             try file.delete()
@@ -71,7 +71,7 @@ class FilesTests: XCTestCase {
             try assert(file.read(), throwsError: File.Error.readFailed)
             
             // Attempting to create a File instance with the path should now also fail
-            try assert(File(path: file.url), throwsError: File.PathError.invalid(file.url))
+            try assert(File(url: file.url), throwsError: File.PathError.invalid(file.url))
         }
     }
     
@@ -86,7 +86,7 @@ class FilesTests: XCTestCase {
             XCTAssertEqual(subfolder.url, folder.url + "folder/")
             
             // You should now be able to access the folder using its path and through the parent
-            _ = try Folder(path: subfolder.url)
+            _ = try Folder(url: subfolder.url)
             XCTAssertTrue(folder.containsSubfolder(named: "folder"))
             
             // Put a file in the folder
@@ -96,7 +96,7 @@ class FilesTests: XCTestCase {
             try subfolder.delete()
             
             // Attempting to create a Folder instance with the path should now fail
-            try assert(Folder(path: subfolder.url), throwsError: Folder.PathError.invalid(subfolder.url))
+            try assert(Folder(url: subfolder.url), throwsError: Folder.PathError.invalid(subfolder.url))
             
             // The file contained in the folder should now also be deleted
             try assert(file.read(), throwsError: File.Error.readFailed)
@@ -154,7 +154,7 @@ class FilesTests: XCTestCase {
             XCTAssertNotEqual(FileManager.default.currentDirectory, folder.url)
             
             XCTAssertTrue(FileManager.default.changeCurrentDirectory(folder.url))
-            let file = try File(name: "file")
+            let file = try File(path: "file")
             try XCTAssertEqual(file.read(), Data())
         }
     }
@@ -162,7 +162,7 @@ class FilesTests: XCTestCase {
     func testReadingFileWithTildePath() {
         performTest {
             try folder.createFile(named: "File")
-            let file = try File(path: "~/.filesTest/File")
+            let file = try File(url: "~/.filesTest/File")
             try XCTAssertEqual(file.read(), Data())
             XCTAssertEqual(file.url, folder.url + "File")
 
@@ -181,7 +181,7 @@ class FilesTests: XCTestCase {
             XCTAssertTrue(FileManager.default.changeCurrentDirectory(subfolder.url))
             XCTAssertEqual(FileManager.default.currentDirectory, subfolder.url)
 
-            try XCTAssertEqual(File(path: "../file"), file)
+            try XCTAssertEqual(File(url: "../file"), file)
         }
     }
 
@@ -192,7 +192,7 @@ class FilesTests: XCTestCase {
             let subfolderC = try folder.createSubfolder(named: "C")
             let file = try subfolderC.createFile(named: "file")
 
-            try XCTAssertEqual(File(path: subfolderA.url + "../B/../C/file"), file)
+            try XCTAssertEqual(File(url: subfolderA.url + "../B/../C/file"), file)
         }
     }
     
@@ -441,13 +441,13 @@ class FilesTests: XCTestCase {
     
     func testRootFolderParentIsNil() {
         performTest {
-            try XCTAssertNil(Folder(path: "/").parent)
+            try XCTAssertNil(Folder(url: "/").parent)
         }
     }
     
     func testOpeningFileWithEmptyPathThrows() {
         performTest {
-            try assert(File(path: ""), throwsError: File.PathError.empty)
+            try assert(File(url: ""), throwsError: File.PathError.empty)
         }
     }
     
@@ -588,7 +588,7 @@ class FilesTests: XCTestCase {
 
             XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(self.folder.url.path))
 
-            let folder = try Folder(path: "")
+            let folder = try Folder(url: "")
             XCTAssertEqual(FileManager.default.currentDirectoryPath, folder.url.path)
             XCTAssertEqual(FileManager.default.currentDirectory, folder.url)
             XCTAssertEqual(FileSystem().currentFolder, folder)
@@ -613,7 +613,7 @@ class FilesTests: XCTestCase {
             XCTAssertEqual(file.name, fileName)
             XCTAssertEqual(file.url, filePath)
 
-            try XCTAssertEqual(File(path: filePath).read(), contents)
+            try XCTAssertEqual(File(url: filePath).read(), contents)
         }
     }
 
@@ -634,7 +634,7 @@ class FilesTests: XCTestCase {
         performTest {
             let folderPath = folder.url + "one/two/three"
             try FileSystem().createFolder(at: folderPath)
-            _ = try Folder(path: folderPath)
+            _ = try Folder(url: folderPath)
         }
     }
 
@@ -808,16 +808,3 @@ extension FilesTests {
     }
 }
 #endif
-
-extension URL: ExpressibleByStringLiteral {
-    public init(stringLiteral value: StaticString) {
-        self = URL(fileURLWithPath: NSString(stringLiteral: value).standardizingPath)
-    }
-}
-
-extension URL {
-    static func +(lhs: URL, rhs: String) -> URL {
-        let isDirectory = rhs.hasSuffix("/")
-        return lhs.appendingPathComponent(rhs, isDirectory: isDirectory)
-    }
-}
