@@ -580,17 +580,14 @@ class FilesTests: XCTestCase {
 
     func testAccessingCurrentWorkingDirectory() {
         performTest {
-            // FIXME: This test is failing but might be a special case.
-            // We're using URL.standardizedFileURL internally to expand urls.
-            // The issue is that standardizedFileURL strips "/private" from the path
-            // according to its documentation https://developer.apple.com/documentation/foundation/nsurl/1414302-standardizingpath
-            // This test is operating out of "/private" so it gets stripped
-            // The failure reason on this test is slightly misleading.
-            // It reads: XCTAssertEqual failed: ("file:///private/tmp/") is not equal to (" -- file:///private/tmp/")
-            // But if you print the second url out, you'll see that private has indeed been stripped.
-            // So, rightfully, file:///private/tmp/ != file:///tmp/
-            // We need to find the correct way to handle this
-            // We should continue using standardizedFileURL whatever the solution is.
+            let cachedPath = FileManager.default.currentDirectoryPath
+
+            defer {
+                XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(cachedPath))
+            }
+
+            XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(self.folder.url.path))
+
             let folder = try Folder(path: "")
             XCTAssertEqual(FileManager.default.currentDirectoryPath, folder.url.path)
             XCTAssertEqual(FileManager.default.currentDirectory, folder.url)

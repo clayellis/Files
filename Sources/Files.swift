@@ -899,6 +899,7 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *
      *  This will still keep the folder itself on disk. If you wish to delete the folder as well, call `delete()` on it.
      */
+    // TODO: Deprecate this and rename it deleteContents()
     public func empty(includeHidden: Bool = false) throws {
         try makeFileSequence(includeHidden: includeHidden).forEach { try $0.delete() }
         try makeSubfolderSequence(includeHidden: includeHidden).forEach { try $0.delete() }
