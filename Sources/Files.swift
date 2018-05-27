@@ -219,7 +219,7 @@ public class FileSystem {
 
         fileprivate init(url: URL, kind: Kind, using fileManager: FileManager) throws {
             if kind == .file {
-                if #available(OSX 10.11, *) {
+                if #available(OSX 10.11, iOS 9.0, *) {
                     if url.hasDirectoryPath {
                         throw PathError.empty
                     }
@@ -317,7 +317,7 @@ public class FileSystem {
     
     /// A reference to the temporary folder used by this file system
     public var temporaryFolder: Folder {
-        if #available(OSX 10.12, *) {
+        if #available(OSX 10.12, iOS 10.0, tvOS 10.0, *) {
             return try! Folder(url: fileManager.temporaryDirectory, using: fileManager)
         } else {
             let temporaryFolderPath = NSTemporaryDirectory()
@@ -326,6 +326,7 @@ public class FileSystem {
         }
     }
     
+    #if os(OSX)
     /// A reference to the current user's home folder
     public var homeFolder: Folder {
         if #available(OSX 10.12, *) {
@@ -336,6 +337,7 @@ public class FileSystem {
             return try! Folder(url: homeFolderURL, using: fileManager)
         }
     }
+    #endif
 
     // A reference to the folder that is the current working directory
     public var currentFolder: Folder {
@@ -642,10 +644,12 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
         return FileSystem(using: .default).currentFolder
     }
 
+    #if os(OSX)
     /// A reference to the current user's home folder
     public static var home: Folder {
         return FileSystem(using: .default).homeFolder
     }
+    #endif
 
     /// A reference to the temporary folder used by this file system
     public static var temporary: Folder {
@@ -718,7 +722,7 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      */
     public func file(at url: URL) throws -> File {
         let filePath: URL
-        if #available(OSX 10.11, *) {
+        if #available(OSX 10.11, iOS 9.0, *) {
             filePath = URL(fileURLWithPath: url.path, isDirectory: false, relativeTo: url)
         } else {
             filePath = url.appendingPathComponent(url.path, isDirectory: false)
@@ -768,7 +772,7 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      */
     public func subfolder(at url: URL) throws -> Folder {
         let folderURL: URL
-        if #available(OSX 10.11, *) {
+        if #available(OSX 10.11, iOS 9.0, *) {
             folderURL = URL(fileURLWithPath: url.path, isDirectory: true, relativeTo: url)
         } else {
             folderURL = url.appendingPathComponent(url.path, isDirectory: true)
