@@ -326,18 +326,11 @@ public class FileSystem {
         }
     }
     
-    #if os(OSX)
     /// A reference to the current user's home folder
     public var homeFolder: Folder {
-        if #available(OSX 10.12, *) {
-            return try! Folder(url: fileManager.homeDirectoryForCurrentUser, using: fileManager)
-        } else {
-            let homeFolderPath = ProcessInfo.processInfo.homeFolderPath
-            let homeFolderURL = URL(fileURLWithPath: homeFolderPath, isDirectory: true)
-            return try! Folder(url: homeFolderURL, using: fileManager)
-        }
+        let homeFolderURL = URL(fileURLWithPath: NSHomeDirectory())
+        return try! Folder(url: homeFolderURL, using: fileManager)
     }
-    #endif
 
     // A reference to the folder that is the current working directory
     public var currentFolder: Folder {
@@ -644,12 +637,10 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
         return FileSystem(using: .default).currentFolder
     }
 
-    #if os(OSX)
     /// A reference to the current user's home folder
     public static var home: Folder {
         return FileSystem(using: .default).homeFolder
     }
-    #endif
 
     /// A reference to the temporary folder used by this file system
     public static var temporary: Folder {
@@ -707,7 +698,6 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *
      *  - throws: `File.PathError.invalid` if the file couldn't be found
      */
-    // TODO: Deprecate
     public func file(atPath filePath: String) throws -> File {
         let filePath = url.appendingPathComponent(filePath, isDirectory: false)
         return try File(url: filePath, using: fileManager)
@@ -1146,12 +1136,6 @@ public extension FileManager {
 private extension String {
     var fileURL: URL {
         return URL(fileURLWithPath: NSString(string: self).standardizingPath)
-    }
-}
-
-private extension ProcessInfo {
-    var homeFolderPath: String {
-        return environment["HOME"]!
     }
 }
 
