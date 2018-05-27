@@ -716,10 +716,13 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *
      *  - throws: `File.PathError.invalid` if the file couldn't be found
      */
-    // TODO: Write test for this
-    // TODO: Make this defer to file(atPath:) or make file(atPath:) defer to this so logic isn't duplicated
     public func file(at url: URL) throws -> File {
-        let fileURL = self.url.appendingPathComponent(url.path, isDirectory: false)
+        let fileURL: URL
+        if #available(OSX 10.11, iOS 9, tvOS 9, *) {
+            fileURL = URL(fileURLWithPath: url.path, isDirectory: false, relativeTo: self.url)
+        } else {
+            fileURL = url
+        }
         return try File(url: fileURL, using: fileManager)
     }
 
@@ -763,11 +766,14 @@ public final class Folder: FileSystem.Item, FileSystemIterable {
      *
      *  - throws: `Folder.PathError.invalid` if the folder couldn't be found
      */
-    // TODO: Write test for this
-    // TODO: Make this defer to subfolder(atPath:) or make subfolder(atPath:) defer to this so logic isn't duplicated
     public func subfolder(at url: URL) throws -> Folder {
-        let url = self.url.appendingPathComponent(url.path, isDirectory: true)
-        return try Folder(url: url, using: fileManager)
+        let subFolderURL: URL
+        if #available(OSX 10.11, iOS 9, tvOS 9, *) {
+            subFolderURL = URL(fileURLWithPath: url.path, isDirectory: false, relativeTo: self.url)
+        } else {
+            subFolderURL = url
+        }
+        return try Folder(url: subFolderURL, using: fileManager)
     }
 
     /**

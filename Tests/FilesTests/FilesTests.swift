@@ -211,6 +211,7 @@ class FilesTests: XCTestCase {
             let subfolderB = try subfolderA.createSubfolder(named: "B")
             let file = try subfolderB.createFile(named: "C")
             try XCTAssertEqual(folder.file(atPath: "A/B/C"), file)
+            try XCTAssertEqual(folder.file(at: folder.url.appendingPathComponent("A/B/C")), file)
         }
     }
 
@@ -220,6 +221,7 @@ class FilesTests: XCTestCase {
             let subfolderB = try subfolderA.createSubfolder(named: "B")
             let subfolderC = try subfolderB.createSubfolder(named: "C")
             try XCTAssertEqual(folder.subfolder(atPath: "A/B/C"), subfolderC)
+            try XCTAssertEqual(folder.subfolder(at: folder.url.appendingPathComponent("A/B/C")), subfolderC)
         }
     }
 
